@@ -1,0 +1,97 @@
+---
+title: "NEL population"
+author: "Peter Wynn-Jones"
+date: "2025-02-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(leaflet)
+library(R.utils)
+library(scales)
+library(deckgl)
+library(htmlwidgets)
+library(plotly)
+library(sf)         
+library(dplyr)   
+library(ggplot2)    
+library(readr)
+library(viridisLite)
+```
+
+```{r}
+sf <- st_read("NEL_LSOA_2011_BGC.geojson", quiet = FALSE)
+pop <- read_csv("LSOA population.csv")
+
+nel <- left_join(sf, pop, by = "LSOA11CD") %>%
+  mutate(
+    population_density = round(1000000*POPULATION/Shape__Are)
+  )
+filename <- "NEL_LSOA_2011_BGC.geojson.gz"
+gsub(pattern = ".gz", replacement = "", x = filename)
+pop_df <- nel
+
+# 4. PALETTE
+
+pal <- scales::col_quantile(
+  "viridis",
+  pop_df$population_density,
+  n = 6
+)
+
+pop_df$color <- pal(
+  pop_df$population_density
+)
+
+```
+
+
+
+```{r}
+properties <- list(
+  stroked = T,
+  filled = T,
+  extruded = T,
+  wireframe = F,
+  elevationScale = 0.03,
+  getFillColor = ~color,
+  getLineColor = ~color,
+  getElevation = ~population_density,
+  getPolygon = deckgl::JS(
+    "d => d.geometry.coordinates"
+  ),
+  tooltip = "Population Density per square KM: {{population_density}}",
+  opacity = .25
+)
+
+```
+
+
+```{r}
+map <- deckgl::deckgl(
+  latitude = 51.544963,
+  longitude = 0.040661,
+  zoom = 10, pitch = 45
+) |>
+  deckgl::add_polygon_layer(
+    data = pop_df,
+    properties = properties
+  ) |>
+  deckgl::add_basemap(
+    deckgl::use_carto_style()
+  )
+
+# 6. EXPORT AS HTML
+
+htmlwidgets::saveWidget(
+  map, file = "NEL_map.html",
+  selfcontained = F
+)
+
+```
